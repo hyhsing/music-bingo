@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Christmas Music Bingo 賓果卡</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: "Songti TC", "Noto Serif TC", Georgia, serif; background: #fcf7ee; color: #0d2247; padding: 16px; }
+  .tools { max-width: 190mm; margin: 0 auto 16px; display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+  .tools h1 { width: 100%; color: #0d2247; font-size: 24px; }
+  .tools p { width: 100%; font-size: 14px; line-height: 1.7; color: #3d4a68; }
+  button, select, input[type=number] { font: inherit; background: #fffdf8; color: #0d2247; border: 1px solid #b8892f88; border-radius: 8px; padding: 6px 12px; }
+  input[type=number] { width: 84px; }
+  button { cursor: pointer; }
+  #printBtn { background: #a97c22; color: #fffdf8; font-weight: 700; }
+  a { color: #8a5d0a; margin-left: auto; }
+  label { display: flex; align-items: center; gap: 6px; }
+
+  #sheets { overflow-x: auto; }
+  /* 一張 A4 放兩張卡 */
+  .sheet { width: 190mm; height: 273mm; margin: 0 auto 16px; padding: 3mm 0; background: #fff; display: flex; flex-direction: column; justify-content: space-between; align-items: center; }
+  .card { width: 118mm; height: 130mm; padding: 3mm; border: 1.2mm solid #8e1f2f; outline: .4mm solid #b9954c; outline-offset: -2.4mm; border-radius: 4mm; background: #fffaf0; color: #0f2f26; display: flex; flex-direction: column; gap: 1.5mm; }
+  .card header { display: flex; align-items: baseline; justify-content: space-between; padding: 1mm 2mm 0; color: #8e1f2f; font-weight: 700; font-size: 13pt; }
+  .card header small { font-size: 9pt; color: #6b5a2e; }
+  .grid { flex: 1; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); grid-template-rows: 10mm repeat(5, minmax(0, 1fr)); gap: .8mm; }
+  .grid > div { display: flex; flex-direction: column; align-items: center; justify-content: center; border: .3mm solid #b9954c; border-radius: 1.5mm; overflow: hidden; text-align: center; min-width: 0; }
+  .grid .head { background: #1d6a4b; color: #fffaf0; font: 700 16pt Georgia, serif; border-color: #1d6a4b; }
+  .grid b { font: 700 22pt "Times New Roman", serif; line-height: 1.1; }
+  .grid span { font-size: 7pt; line-height: 1.2; padding: 0 .6mm; overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+  .grid .free { background: #f1d6d3; color: #8e1f2f; font-weight: 700; font-size: 10pt; }
+  .grid .free i { font-style: normal; font-size: 18pt; }
+
+  /* 晚宴自填卡：一張滿版 A4 */
+  .page { width: 210mm; height: 297mm; margin: 0 auto 16px; background: #fff; box-shadow: 0 6px 24px #6b4f1a33; }
+  .page img { width: 100%; height: 100%; object-fit: contain; display: block; }
+  .random-only[hidden] { display: none; }
+  @media print {
+    * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    body { background: #fff; padding: 0; }
+    .tools { display: none; }
+    #sheets { overflow: visible; }
+    .sheet, .page { margin: 0 auto; break-inside: avoid; box-shadow: none; }
+    .page { height: 296mm; }
+    .sheet + .sheet, .page + .page { break-before: page; }
+  }
+</style>
+<style id="pageStyle"></style>
+</head>
+<body>
+<div class="tools">
+  <h1>🎄 賓果卡列印</h1>
+  <label>卡片 <select id="mode"><option value="evening">晚宴自填卡 4×4（1～20）</option><option value="random">隨機號碼卡 5×5</option></select></label>
+  <label>張數 <input type="number" id="count" min="1" max="200" value="1"></label>
+  <label class="random-only">號碼 1～<select id="max"><option>25</option><option>50</option><option selected>75</option></select></label>
+  <label class="random-only"><input type="checkbox" id="free" checked> 中央免費格</label>
+  <label class="random-only"><input type="checkbox" id="titles"> 印上曲名</label>
+  <button id="shuffleBtn" class="random-only">🔀 重新洗牌</button>
+  <button id="printBtn">🖨 列印／存成 PDF</button>
+  <a href="./">← 回遊戲</a>
+  <p id="info"></p>
+  <p class="random-only">每次重新整理或洗牌，卡片都會重排。要保留同一批，請在列印視窗選「儲存為 PDF」。</p>
+</div>
+<div id="sheets"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+const saved = JSON.parse(localStorage.getItem('music-bingo-v1') || '{}');
+let songs = saved.songs || {};
+let cards = [];
+
+const random = n => crypto.getRandomValues(new Uint32Array(1))[0] % n;
+function shuffle(list) {
+  for (let i = list.length - 1; i > 0; i--) {
+    const j = random(i + 1);
+    [list[i], list[j]] = [list[j], list[i]];
+  }
+  return list;
+}
+
+// 一張卡是 5 欄（B-I-N-G-O），每欄從自己的號碼區間抽 5 個
+function makeCard(max) {
+  const size = max / 5;
+  return Array.from({ length: 5 }, (_, c) => shuffle(Array.from({ length: size }, (_, i) => c * size + i + 1)).slice(0, 5));
+}
+
+const evening = () => $('mode').value === 'evening';
+
+function generate() {
+  const count = Math.min(200, Math.max(1, Math.floor(Number($('count').value)) || 1));
+  $('count').value = count;
+  const max = Number($('max').value), seen = new Set();
+  cards = [];
+  while (cards.length < count) {
+    const card = makeCard(max), key = card.join('|');
+    if (!seen.has(key)) { seen.add(key); cards.push(card); }
+  }
+  render();
+}
+
+function el(tag, className, text) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text !== undefined) node.textContent = text;
+  return node;
+}
+
+function drawCard(card, index) {
+  const box = el('section', 'card'), top = el('header', '', '🎄 聖誕音樂賓果');
+  top.append(el('small', '', `卡號 ${String(index + 1).padStart(3, '0')}`));
+  const grid = el('div', 'grid');
+  for (const letter of 'BINGO') grid.append(el('div', 'head', letter));
+  for (let row = 0; row < 5; row++) {
+    for (let col = 0; col < 5; col++) {
+      if ($('free').checked && row === 2 && col === 2) {
+        const cell = el('div', 'free');
+        cell.append(el('i', '', '★'), el('span', '', '免費格'));
+        grid.append(cell);
+        continue;
+      }
+      const n = card[col][row], cell = el('div');
+      cell.append(el('b', '', n));
+      if ($('titles').checked && songs[n]?.title) cell.append(el('span', '', songs[n].title));
+      grid.append(cell);
+    }
+  }
+  box.append(top, grid);
+  return box;
+}
+
+function render() {
+  $('pageStyle').textContent = `@page { size: A4 portrait; margin: ${evening() ? 0 : '10mm'}; }`;
+  document.querySelectorAll('.random-only').forEach(node => { node.hidden = evening(); });
+  if (evening()) {
+    $('sheets').replaceChildren(...cards.map(() => {
+      const page = el('div', 'page'), img = el('img');
+      img.src = 'card-final.png'; img.alt = 'Christmas Music Bingo 4×4 自填賓果卡（最終版）';
+      page.append(img);
+      return page;
+    }));
+    $('info').textContent = `共 ${cards.length} 頁 A4，每頁一張相同的空白卡。也可以只留 1 頁，在列印視窗設定份數。遊戲的號碼範圍請設成 1～20。⚠️ 目前的卡片圖只有 388×548 px，印 A4 會模糊，正式列印前請換成高解析原檔（覆蓋 card-final.png）。`;
+    return;
+  }
+  const sheets = [];
+  for (let i = 0; i < cards.length; i += 2) {
+    const sheet = el('div', 'sheet');
+    cards.slice(i, i + 2).forEach((card, j) => sheet.append(drawCard(card, i + j)));
+    sheets.push(sheet);
+  }
+  $('sheets').replaceChildren(...sheets);
+
+  const max = Number($('max').value);
+  const titled = Array.from({ length: max }, (_, i) => songs[i + 1]?.title).filter(Boolean).length;
+  const notes = [`共 ${cards.length} 張卡，列印為 ${sheets.length} 頁 A4。遊戲裡的號碼範圍也要設成 1～${max}。`];
+  if (max === 25) notes.push('1～25 時每張卡的號碼幾乎相同、只有位置不同，容易很多人同時賓果，建議用 50 或 75。');
+  if ($('titles').checked && titled < max) notes.push(`目前讀到 ${titled}／${max} 首曲名，沒有曲名的格子只印號碼。`);
+  $('info').textContent = notes.join(' ');
+}
+
+$('max').value = String([25, 50, 75].includes(saved.max) ? saved.max : 75);
+$('mode').onchange = () => { $('count').value = evening() ? 1 : 20; generate(); };
+$('count').onchange = $('max').onchange = $('shuffleBtn').onclick = generate;
+$('free').onchange = $('titles').onchange = render;
+$('printBtn').onclick = () => print();
+generate();
+
+// 這台瀏覽器沒有自己的歌單時（例如 GitHub Pages），讀同資料夾的 songs.json
+if (!Object.keys(songs).length) {
+  fetch('songs.json', { cache: 'no-store' })
+    .then(r => r.ok ? r.json() : {})
+    .then(data => { songs = data; render(); })
+    .catch(() => {});
+}
+</script>
+</body>
+</html>

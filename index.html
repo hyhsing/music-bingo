@@ -1,0 +1,837 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Christmas Music Bingo</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,600;0,700;1,700&display=swap">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, "PingFang TC", "Noto Sans TC", sans-serif;
+    color: #fff; min-height: 100vh; padding: 16px;
+    background: radial-gradient(circle at 50% 30%, #25409a 0%, #101c4d 45%, #070b24 100%) fixed;
+  }
+  header { max-width: 1500px; margin: 0 auto 12px; display: flex; align-items: center; gap: 8px; }
+  h1 { font-size: 26px; margin-right: auto; }
+  button { font: inherit; cursor: pointer; border: 1px solid #ffffff44; background: #1b2a63; color: #fff; border-radius: 10px; padding: 8px 14px; }
+  button:hover:not(:disabled) { filter: brightness(1.25); }
+  button:disabled { opacity: .4; cursor: default; }
+  main { max-width: 1500px; margin: 0 auto; display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: 20px; align-items: start; }
+  .stage { display: flex; flex-direction: column; align-items: center; gap: 10px; min-width: 0; }
+  /* 搖獎機跟著螢幕高度放大，下方留位置給「抽一顆」按鈕 */
+  .machine { position: relative; width: min(100%, 800px, max(360px, calc((100vh - 235px) / 1.08))); aspect-ratio: 1 / 1.08; container-type: inline-size; }
+  #canvas { width: 100%; height: 100%; display: block; }
+  .bigball {
+    position: absolute; left: 50%; bottom: 0; width: 40%; aspect-ratio: 1; border-radius: 50%;
+    transform: translateX(-50%) scale(0); display: grid; place-items: center;
+    background: var(--c, #3b5bdb); box-shadow: 0 0 40px #ffd45a88, inset -10px -14px 24px #0006, inset 8px 10px 18px #fff5;
+  }
+  .bigball.show { animation: pop .6s cubic-bezier(.2,1.6,.4,1) forwards; }
+  @keyframes pop { from { transform: translate(-50%, -60%) scale(.2) rotate(-200deg); } to { transform: translate(-50%, 0) scale(1) rotate(0); } }
+  .bigball span { width: 66%; aspect-ratio: 1; border-radius: 50%; background: #fffaf0; color: #17132e; display: grid; place-items: center; font-weight: 800; font-size: 10.5cqw; white-space: nowrap; }
+  #remain { color: #b9c4f0; font-size: 14px; }
+  #drawBtn { background: #ffc93c; color: #2a1c00; border: 0; border-bottom: 5px solid #b98600; font-size: 22px; font-weight: 800; padding: 14px 48px; border-radius: 16px; }
+  .panel { background: #090f2ecc; border: 1px solid #ffffff1f; border-radius: 16px; padding: 14px; display: flex; flex-direction: column; gap: 12px; }
+  .now { min-height: 76px; text-align: center; display: flex; flex-direction: column; justify-content: center; gap: 4px; }
+  .now small { color: #ffc93c; font-weight: 700; }
+  .now strong { font-size: 24px; line-height: 1.3; overflow-wrap: anywhere; }
+  .player { position: relative; height: 152px; border-radius: 12px; overflow: hidden; background: #ffffff0d; }
+  .player iframe { display: block; border: 0; }
+  .cover { position: absolute; inset: 0; background: #17235a; display: none; flex-direction: column; align-items: center; justify-content: center; gap: 10px; z-index: 2; }
+  .cover.on { display: flex; }
+  .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .row > .grow { flex: 1; }
+  .green { background: #1db954; border-color: #1db954; color: #04210e; font-weight: 700; }
+  a.open { color: #4be083; font-size: 14px; margin-left: auto; }
+  select { font: inherit; background: #1b2a63; color: #fff; border: 1px solid #ffffff44; border-radius: 8px; padding: 4px 8px; }
+  label { display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 15px; }
+  #history { list-style: none; max-height: 190px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
+  #history button { width: 100%; display: flex; gap: 10px; text-align: left; align-items: center; padding: 6px 10px; font-size: 14px; }
+  #history b { flex: 0 0 46px; color: #ffc93c; }
+  #board { grid-column: 1 / -1; background: #090f2ecc; border: 1px solid #ffffff1f; border-radius: 16px; padding: 10px; display: flex; flex-direction: column; gap: 5px; }
+  .line { display: grid; grid-template-columns: 34px repeat(15, 1fr); gap: 5px; }
+  .line i { font-style: normal; font-weight: 800; display: grid; place-items: center; border-radius: 7px; background: var(--c); }
+  .cell { padding: 7px 0; border-radius: 7px; border: 0; background: #ffffff12; color: #aeb9e6; font-variant-numeric: tabular-nums; }
+  .cell:disabled { opacity: 1; }
+  .cell.hit { background: #ff4d5e; color: #fff; font-weight: 800; box-shadow: 0 0 10px #ff4d5e99; cursor: pointer; }
+  dialog { margin: auto; width: min(720px, 94vw); background: #0f1844; color: #fff; border: 1px solid #ffffff33; border-radius: 16px; padding: 20px; }
+  dialog::backdrop { background: #000a; }
+  dialog p { font-size: 14px; line-height: 1.7; color: #c8d1f5; margin: 8px 0; }
+  textarea { width: 100%; height: 46vh; background: #060a22; color: #fff; border: 1px solid #ffffff33; border-radius: 10px; padding: 10px; font: 13px/1.7 ui-monospace, Menlo, monospace; white-space: pre; }
+  code { background: #ffffff1a; padding: 1px 5px; border-radius: 4px; }
+  #status { font-size: 13px; color: #ffc93c; min-height: 20px; margin: 6px 0; white-space: pre-line; max-height: 80px; overflow-y: auto; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } .line { gap: 2px; grid-template-columns: 22px repeat(15, 1fr); } .cell { font-size: 11px; } }
+
+  /* ---------- 晚宴卡片主題：米白、深藍、香檳金 ---------- */
+  :root { --navy: #0d2247; --gold: #a97c22; --gold-soft: #b8892f77; --ivory: #fcf7ee; }
+  body { font-family: "Cormorant Garamond", "Songti TC", "Noto Serif TC", Georgia, serif; color: var(--navy);
+    background: radial-gradient(ellipse at 50% 0%, #fffdf8 0%, #fcf7ee 48%, #f1e6d2 100%) fixed; }
+  #snow { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 0; }
+  header, main { position: relative; z-index: 1; }
+  .brand { margin-right: auto; }
+  .brand small { display: block; font-size: 13px; letter-spacing: .1em; }
+  header h1 { color: var(--navy); font: italic 700 32px "Cormorant Garamond", Georgia, serif; }
+  .lights { max-width: 1500px; margin: 0 auto 14px; height: 10px; position: relative; z-index: 1;
+    background: radial-gradient(circle, #c99a35 0 2.5px, #e9c46a55 3.5px, transparent 5px) 0 50% / 30px 10px repeat-x; animation: twinkle 2.8s ease-in-out infinite alternate; }
+  @keyframes twinkle { from { opacity: .45; } to { opacity: 1; } }
+  button, select { background: #fffdf8; color: var(--navy); border-color: var(--gold-soft); }
+  .panel, #board { background: #fffdf8ee; border: 1px solid var(--gold); box-shadow: 0 0 0 4px #fffdf8, 0 0 0 5px #b8892f55, 0 16px 36px #6b4f1a22; }
+  .now small, #history b { color: var(--gold); letter-spacing: .08em; }
+  .now strong { color: var(--navy); }
+  #drawBtn { background: linear-gradient(180deg, #1b366b, #0d2247); color: #fff3d6; border: 1px solid var(--gold); border-bottom: 4px solid #a8863f; border-radius: 999px; letter-spacing: .2em; }
+  .green { background: linear-gradient(180deg, #c99a35, #a97c22); border-color: #a97c22; color: #fffdf8; }
+  a.open { color: var(--gold); }
+  input[type=checkbox] { accent-color: var(--navy); }
+  #remain, #remainHint { color: #5b6783 !important; }
+  .player { background: #0d22470a; }
+  .cover { background: linear-gradient(160deg, #1b366b, #0d2247); color: #fff3d6; border: 1px solid var(--gold); border-radius: 12px; }
+  .cover.guessing { background: linear-gradient(160deg, #c99a35, #8f6718); }
+  .cover button:not(.green) { background: #fffdf8; }
+  .cover #coverText { font-size: 18px; font-weight: 700; }
+  .line i { color: #fffaf0; border: 1px solid #b8892f88; }
+  .cell { background: #0d22470d; color: #5b6783; font-family: inherit; font-size: 17px; }
+  .cell.hit { background: linear-gradient(180deg, #1b366b, #0d2247); color: #fff3d6; box-shadow: inset 0 0 0 1px #d9b56a, 0 0 10px #b8892f88; }
+  .bigball { box-shadow: 0 8px 36px #a97c2288, inset -10px -14px 24px #0006, inset 8px 10px 18px #fff6; }
+  .bigball::before { content: ""; position: absolute; top: -9%; width: 24%; height: 13%; border-radius: 5px 5px 2px 2px; background: linear-gradient(90deg, #9c7a35, #f3dc9e, #9c7a35); }
+  .bigball span { background: var(--ivory); color: var(--navy); border: 3px double #b9954c; }
+  dialog { background: var(--ivory); color: var(--navy); border: 1px solid var(--gold); }
+  dialog p { color: #3d4a68; }
+  textarea { background: #fff; color: var(--navy); border-color: var(--gold-soft); }
+  code { background: #0d224712; }
+  #status { color: #8a5d0a; }
+
+  /* 填卡說明：開場投在螢幕上，不顯示歌名 */
+  #wall { width: 100vw; height: 100vh; max-width: 100vw; max-height: 100vh; border: 0; border-radius: 0; padding: 2.5vh 4vw; text-align: center; overflow: auto; }
+  #wall h2 { font: italic 700 clamp(28px, 6vh, 60px) "Cormorant Garamond", Georgia, serif; }
+  #wall p { font-size: clamp(14px, 2.2vh, 22px); margin: .6vh 0; color: var(--navy); }
+  #wall p b { background: var(--gold); color: #fffdf8; border-radius: 999px; padding: 0 .8em; }
+  /* ---------- 晚宴投影場景（深藍、香檳金） ---------- */
+  .stage { position: relative; isolation: isolate; }
+  .bigball { width: 31%; bottom: -1%; background: radial-gradient(circle at 34% 27%, color-mix(in srgb, var(--c, #1d3c82), #fff 45%) 0%, var(--c, #1d3c82) 36%, color-mix(in srgb, var(--c, #1d3c82), #000 58%) 100%);
+    box-shadow: 0 18px 38px #0008, 0 0 56px #ffd78a66, inset -8px -12px 28px #0007, inset 6px 8px 20px #ffffff40; }
+  .bigball::after { content: ""; position: absolute; left: 16%; top: 8%; width: 34%; height: 17%; border-radius: 50%; transform: rotate(-28deg); background: linear-gradient(#ffffffd9, #ffffff0d); pointer-events: none; }
+  .bigball span { background: radial-gradient(circle at 38% 30%, #fffef9, #f8efd8 70%, #dcc99c); box-shadow: 0 0 0 4px #b9954c, 0 4px 14px #0006; border: 2px solid #b9954c; outline: 1px solid #b9954c; outline-offset: -9px; font-family: "Cormorant Garamond", Georgia, serif; font-weight: 700; font-variant-numeric: lining-nums; }
+
+  body.night { color: #f5e9c9; background: radial-gradient(ellipse 70% 62% at 36% 40%, #223f78 0%, #0e1c42 45%, #040915 100%) #040915 fixed; }
+  body.night .stage::before { content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none; background: radial-gradient(ellipse 50% 46% at 50% 38%, #ffdf9a30, #ffdf9a00 72%); }
+  body.night header h1 { font-size: 40px; letter-spacing: .02em; background: linear-gradient(180deg, #fff6d8 20%, #e2bd68 55%, #b48a33 80%, #f1d795); -webkit-background-clip: text; background-clip: text; color: transparent; padding-right: .12em; }
+  body.night .brand small { color: #e9dbb4; }
+  body.night button, body.night select { background: #0f1e44; color: #f7e9c2; border-color: #b8943f99; }
+  body.night .lights { background-image: radial-gradient(circle, #ffe9ae 0 2px, #ffcf6a59 4px, transparent 6px); }
+  body.night .panel, body.night #board { background: linear-gradient(180deg, #101f47f0, #081230f0); border: 1px solid #c29d4d; box-shadow: 0 0 0 4px #081230cc, 0 0 0 5px #c29d4d59, 0 22px 50px #0009; }
+  body.night .now small, body.night #history b { color: #e8c877; }
+  body.night .now strong { color: #fff7de; font-size: 28px; }
+  body.night #remain, body.night #remainHint { color: #c9ba93 !important; }
+  body.night #drawBtn { background: linear-gradient(180deg, #fbe9b0 0%, #d9b35c 48%, #a97c22 100%); color: #0b1a3d; border: 1px solid #fff0c2; border-bottom: 4px solid #6f5218; box-shadow: 0 8px 30px #e8c36a59; }
+  body.night .green { background: linear-gradient(180deg, #f3da94, #bd902f); border-color: #f3da94; color: #0b1a3d; }
+  body.night a.open { color: #e8c877; }
+  body.night input[type=checkbox] { accent-color: #d9b35c; }
+  body.night .player { background: #ffffff0a; }
+  body.night .cover { background: linear-gradient(160deg, #1a3266, #070f29); border-color: #d9b56a; }
+  body.night .cover.guessing { background: linear-gradient(160deg, #d9b35c, #8a6418); color: #fffdf5; }
+  body.night .cover button:not(.green) { background: #fffaf0; color: #0b1a3d; }
+  body.night .line i { border-color: #d9b56a; }
+  body.night .cell { background: #ffffff0f; color: #d6c9a4; font-size: 20px; box-shadow: inset 0 0 0 1px #c29d4d33; }
+  body.night .cell.hit { background: linear-gradient(180deg, #fbe9b0, #c59a3d); color: #0b1a3d; box-shadow: 0 0 16px #ffd97a80; }
+  body.night dialog { background: radial-gradient(ellipse at 50% 0%, #1d3770, #08122f 65%, #040915); color: #f8ecca; border-color: #c29d4d; }
+  body.night #wall h2 { color: #f1d795; }
+  body.night dialog p, body.night #wall p { color: #eadfbd; }
+  body.night #wall p b { background: linear-gradient(180deg, #f3da94, #bd902f); color: #0b1a3d; }
+  body.night textarea { background: #050c22; color: #f8ecca; }
+  body.night code { background: #ffffff1a; }
+  body.night #status { color: #ffd97a; }
+  /* 數字：投影時要清楚，統一用粗體無襯線、等寬數字 */
+  .bigball span, .cell, .line i, #wallNums li, #history b, #nowNum, #count, #remain {
+    font-family: "Avenir Next", "Helvetica Neue", Arial, "PingFang TC", sans-serif; font-variant-numeric: lining-nums tabular-nums; }
+  .bigball span, body.night .bigball span { width: 70%; font-weight: 800; font-size: 12cqw; color: #06122e; }
+  .cell, body.night .cell { font-size: 24px; font-weight: 700; padding: 6px 0; }
+  .cell { color: #35415f; }
+  body.night .cell { color: #fff3d0; }
+  .cell.hit, body.night .cell.hit { font-weight: 800; }
+  #nowNum { font-size: 28px; font-weight: 800; }
+  #history b { font-weight: 800; font-size: 17px; flex-basis: 56px; }
+  #count { font-size: 20px; }
+  @media (max-width: 900px) { .cell, body.night .cell { font-size: 13px; } }
+  /* 歌名：投影時也要清楚 */
+  #nowTitle, #history button, #history button span {
+    font-family: "Avenir Next", "Helvetica Neue", Arial, "PingFang TC", "Noto Sans TC", sans-serif; }
+  .now strong, body.night .now strong { font-size: 30px; font-weight: 800; }
+  #history button { font-size: 16px; font-weight: 700; }
+  #wall[open] { display: flex; flex-direction: column; align-items: center; justify-content: safe center; gap: 3.2vh; }
+  #wall .rule, body.night #wall .rule { font-family: "Avenir Next", "Helvetica Neue", Arial, "PingFang TC", "Noto Sans TC", sans-serif; font-size: min(4.6vh, 2.9vw); font-weight: 700; line-height: 1.9; }
+  #wall .rule.en, body.night #wall .rule.en { font-size: min(3vh, 1.9vw); font-weight: 600; }
+  #wall .rule strong { font-weight: 800; color: var(--gold); }
+  body.night #wall .rule strong { color: #f3da94; }
+  #wallNums { list-style: none; display: grid; grid-template-columns: repeat(10, 1fr); gap: 1.4vh 1.1vw; width: min(100%, 150vh); }
+  #wallNums li { aspect-ratio: 1; border-radius: 50%; display: grid; place-items: center; font-size: min(5vh, 3.2vw); font-weight: 800; color: #0b1a3d; background: radial-gradient(circle at 36% 28%, #fffef6, #f0dfae 68%, #c29c4e); box-shadow: 0 4px 14px #0004; }
+  @media (prefers-reduced-motion: reduce) { .lights { animation: none; } #snow { display: none; } }
+</style>
+</head>
+<body class="night">
+<canvas id="snow" aria-hidden="true"></canvas>
+<header>
+  <div class="brand"><small>The Art of Living｜鳳凰城頂級住宅分享暨歲末交流晚宴</small><h1>Christmas Music Bingo</h1></div>
+  <button id="wallBtn">📋 填卡說明</button>
+  <button id="songsBtn">📝 歌單設定</button>
+  <button id="cardsBtn">🎟 賓果卡</button>
+  <button id="themeBtn" title="依會場燈光切換畫面深淺">☀ 明亮版</button>
+  <button id="fullBtn">⛶ 全螢幕</button>
+</header>
+<div class="lights" aria-hidden="true"></div>
+
+<main>
+  <section class="stage">
+    <div class="machine">
+      <canvas id="canvas" width="880" height="950"></canvas>
+      <div class="bigball" id="bigball"><span id="bigtext"></span></div>
+    </div>
+    <div id="remain"></div>
+    <button id="drawBtn">抽一顆</button>
+    <div id="remainHint" style="font-size:12px;color:#8d99cc">也可以按空白鍵</div>
+  </section>
+
+  <aside class="panel">
+    <div class="now" aria-live="polite">
+      <small id="nowNum">準備開始</small>
+      <strong id="nowTitle">按「抽一顆」播第一首歌</strong>
+    </div>
+    <div class="player" id="player">
+      <div id="embed"></div>
+      <div class="cover" id="cover">
+        <div id="coverText"></div>
+        <div class="row">
+          <button id="coverClip" class="green">↺ 再播 5 秒</button>
+          <button id="guessBtn">🎤 開放猜歌</button>
+          <button id="revealBtn">公布答案</button>
+        </div>
+      </div>
+    </div>
+    <div class="row">
+      <button id="replayBtn" class="green" disabled>↺ 播 5 秒</button>
+      <button id="playBtn" disabled>▶ 繼續播／暫停</button>
+      <a class="open" id="openLink" target="_blank" rel="noopener" hidden>在 Spotify 開啟 ↗</a>
+    </div>
+    <label><input type="checkbox" id="guess"> 先藏曲名（由主持人決定猜歌、公布）</label>
+    <label><input type="checkbox" id="voice"> 語音報號</label>
+    <div class="row">
+      <label>自動抽
+        <select id="auto">
+          <option value="0">關</option>
+          <option value="30">每 30 秒</option>
+          <option value="45">每 45 秒</option>
+          <option value="60">每 60 秒</option>
+        </select>
+      </label>
+      <label>號碼 1～<select id="max"><option selected>20</option><option>25</option><option>50</option><option>75</option></select></label>
+    </div>
+    <div class="row">
+      <span class="grow">已抽出 <b id="count">0</b></span>
+      <button id="undoBtn">復原上一個</button>
+      <button id="resetBtn">重新開始</button>
+    </div>
+    <ul id="history"></ul>
+  </aside>
+
+  <section id="board"></section>
+</main>
+
+<dialog id="wall">
+  <h2>Christmas Music Bingo</h2>
+  <p class="rule">請從 <strong>1–20</strong> 中選擇 <strong>16 個不同的數字</strong>，任意填入空格。<br>
+  <b>最先完成兩條連線的 3 位賓客</b> 即可獲得禮物！</p>
+  <p class="rule en">Choose 16 different numbers from 1 to 20 and fill in the squares in any order.<br>
+  <b>The first 3 guests</b> to complete two lines will receive a gift!</p>
+  <ol id="wallNums" aria-label="可填的號碼 1 到 20"></ol>
+  <button id="wallClose">填好了，回到抽球</button>
+</dialog>
+
+<dialog id="songsDialog">
+  <h2>歌單設定</h2>
+  <p>一行一首，第 1 行就是 1 號。建議格式：<code>曲名 - 歌手 https://open.spotify.com/track/…</code><br>
+  線上版（GitHub Pages）不會自動抓曲名，請自己寫上。只有在電腦上用「啟動賓果」開啟時，只貼連結才會自動抓曲名。<br>
+  想指定號碼：行首加 <code>12.</code>　💡 在 Spotify 電腦版的播放清單按 ⌘A、⌘C，再到這裡貼上，可一次貼完整份歌單。</p>
+  <textarea id="songsText" spellcheck="false" placeholder="https://open.spotify.com/track/…&#10;歌名 - 歌手 https://open.spotify.com/track/…&#10;12. https://open.spotify.com/track/…"></textarea>
+  <div id="status"></div>
+  <div class="row">
+    <button id="exportBtn" title="放到 GitHub Pages 用">⬇ 匯出 songs.json</button>
+    <span class="grow"></span>
+    <button id="cancelBtn">取消</button>
+    <button id="saveBtn" class="green">儲存歌單</button>
+  </div>
+</dialog>
+
+<script>
+const $ = id => document.getElementById(id);
+const COLORS = ['#1d3c82', '#b4862a', '#1e6845', '#4b6ea6', '#8d1d33']; // 寶石色
+const KEY = 'music-bingo-v1';
+
+const state = Object.assign(
+  { max: 20, drawn: [], songs: {}, text: '', guess: true, voice: false },
+  JSON.parse(localStorage.getItem(KEY) || '{}')
+);
+if (state.rules !== 'evening') Object.assign(state, { rules: 'evening', max: 20, guess: true, drawn: [] });
+const save = () => localStorage.setItem(KEY, JSON.stringify(state.text ? state : { ...state, songs: {} }));
+
+const perColumn = () => state.max / 5;
+const column = n => Math.min(4, Math.floor((n - 1) / perColumn()));
+const plain = () => state.max === 20; // 自填卡玩法沒有字母欄
+const label = n => plain() ? `${n} 號` : 'BINGO'[column(n)] + ' ' + n;
+const bigLabel = n => plain() ? String(n) : label(n);
+const colorOf = n => COLORS[plain() ? (n - 1) % 5 : column(n)];
+const remaining = () => Array.from({ length: state.max }, (_, i) => i + 1).filter(n => !state.drawn.includes(n));
+
+let current = state.drawn.at(-1) || null;
+let revealed = !state.guess;
+let busy = false;
+let guessing = false; // 主持人是否開放猜歌
+let autoTimer = null;
+
+/* ---------- 球機動畫 ---------- */
+const ctx = $('canvas').getContext('2d');
+const DOME = { x: 440, y: 420, r: 390 };
+let BALL = 42; // 球越少就畫得越大
+let balls = [];
+
+function resetBalls() {
+  sprites = new Map();
+  BALL = state.max <= 25 ? 62 : state.max <= 50 ? 50 : 42;
+  balls = remaining().map(n => {
+    const a = Math.random() * Math.PI * 2, d = Math.sqrt(Math.random()) * (DOME.r - BALL);
+    return { n, x: DOME.x + Math.cos(a) * d, y: DOME.y + Math.sin(a) * d, vx: 0, vy: 0 };
+  });
+}
+
+function step() {
+  for (const b of balls) {
+    b.vy += 0.7;
+    if (busy) {
+      b.vx += (Math.random() - 0.5) * 5 + (DOME.y - b.y) * 0.004;
+      b.vy += (Math.random() - 0.5) * 5 - (b.y > DOME.y + 150 ? 3.5 : 0) - (DOME.x - b.x) * 0.004;
+    }
+    b.vx *= 0.97; b.vy *= 0.97;
+    b.x += b.vx; b.y += b.vy;
+    b.rot = (b.rot || 0) + b.vx / BALL * .7;
+    if (!busy) b.rot = Math.atan2(Math.sin(b.rot), Math.cos(b.rot)) * .93;
+  }
+  for (let i = 0; i < balls.length; i++) {
+    for (let j = i + 1; j < balls.length; j++) {
+      const a = balls[i], b = balls[j];
+      const dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy), min = BALL * 1.85;
+      if (d > 0 && d < min) {
+        const push = (min - d) / 2, ux = dx / d, uy = dy / d;
+        a.x -= ux * push; a.y -= uy * push; b.x += ux * push; b.y += uy * push;
+        a.vx -= ux * push * 0.25; a.vy -= uy * push * 0.25;
+        b.vx += ux * push * 0.25; b.vy += uy * push * 0.25;
+      }
+    }
+  }
+  for (const b of balls) {
+    const dx = b.x - DOME.x, dy = b.y - DOME.y, d = Math.hypot(dx, dy), lim = DOME.r - BALL;
+    if (d > lim) {
+      const ux = dx / d, uy = dy / d, v = b.vx * ux + b.vy * uy;
+      b.x = DOME.x + ux * lim; b.y = DOME.y + uy * lim;
+      if (v > 0) { b.vx -= 1.5 * v * ux; b.vy -= 1.5 * v * uy; }
+    }
+  }
+}
+
+function circle(x, y, r, fill, pen = ctx) {
+  pen.beginPath(); pen.arc(x, y, r, 0, Math.PI * 2); pen.fillStyle = fill; pen.fill();
+}
+
+const SCALE = 2; // 畫布用兩倍解析度，放大投影時比較清楚
+$('canvas').width = 880 * SCALE; $('canvas').height = 950 * SCALE;
+
+function layer(w, h, paint) {
+  const c = document.createElement('canvas');
+  c.width = w * SCALE; c.height = h * SCALE;
+  const pen = c.getContext('2d');
+  pen.scale(SCALE, SCALE);
+  paint(pen);
+  return c;
+}
+
+function fade(g, stops) {
+  stops.forEach(([at, color]) => g.addColorStop(at, color));
+  return g;
+}
+const metal = (pen, x0, x1) => fade(pen.createLinearGradient(x0, 0, x1, 0),
+  [[0, '#4a3512'], [.1, '#a57f35'], [.24, '#f6e3a8'], [.31, '#fffbe6'], [.42, '#caa452'], [.62, '#8a6a2a'], [.78, '#e6c878'], [.9, '#8f6f2e'], [1, '#3d2b0e']]);
+const lacquer = (pen, x0, x1) => fade(pen.createLinearGradient(x0, 0, x1, 0),
+  [[0, '#02050d'], [.16, '#13244a'], [.26, '#41598c'], [.31, '#16294f'], [.6, '#081330'], [.82, '#1a2e58'], [1, '#02050d']]);
+
+function ellipse(pen, x, y, rx, ry, fill, tilt = 0) {
+  pen.beginPath(); pen.ellipse(x, y, rx, ry, tilt, 0, Math.PI * 2); pen.fillStyle = fill; pen.fill();
+}
+
+// 圓柱：上緣半徑 top、下緣半徑 bottom
+function drum(pen, y, top, bottom, h, paint, lid) {
+  pen.beginPath();
+  pen.moveTo(440 - top, y);
+  pen.lineTo(440 - bottom, y + h);
+  pen.ellipse(440, y + h, bottom, bottom * .07, 0, Math.PI, 0, true);
+  pen.lineTo(440 + top, y);
+  pen.closePath();
+  pen.fillStyle = paint(pen, 440 - Math.max(top, bottom), 440 + Math.max(top, bottom)); pen.fill();
+  ellipse(pen, 440, y, top, top * .07, lid || paint(pen, 440 + top, 440 - top));
+}
+
+const isNight = () => document.body.classList.contains('night');
+let backLayer, frontLayer;
+
+function buildMachine() {
+  const night = isNight(), { x, y, r } = DOME;
+  // 球的後面：地面陰影與水晶球內部
+  backLayer = layer(880, 950, pen => {
+    pen.save(); pen.translate(440, 928); pen.scale(1, .08);
+    circle(0, 0, 390, fade(pen.createRadialGradient(0, 0, 60, 0, 0, 390), [[0, night ? '#000c' : '#3a29084d'], [1, '#0000']]), pen);
+    pen.restore();
+    circle(x, y, r, fade(pen.createRadialGradient(x - 110, y - 150, 30, x, y, r), night
+      ? [[0, '#7f9bd53d'], [.62, '#31508a38'], [.9, '#6f8fca4d'], [1, '#c8dbff80']]
+      : [[0, '#ffffff'], [.62, '#e3ebf7'], [.9, '#c3d2ea'], [1, '#9fb4d6']]), pen);
+    pen.save(); pen.beginPath(); pen.arc(x, y, r, 0, Math.PI * 2); pen.clip();
+    pen.translate(x, 735); pen.scale(1, .3);
+    circle(0, 0, 330, fade(pen.createRadialGradient(0, 0, 0, 0, 0, 330), [[0, night ? '#ffd9856e' : '#c99a3540'], [1, '#ffd98500']]), pen);
+    pen.restore();
+  });
+  // 球的前面：玻璃反光與金色底座
+  frontLayer = layer(880, 950, pen => {
+    pen.save(); pen.beginPath(); pen.arc(x, y, r, 0, Math.PI * 2); pen.clip();
+    circle(x, y, r, fade(pen.createRadialGradient(x, y, r * .78, x, y, r), [[0, '#ffffff00'], [.82, '#dce9ff14'], [.96, '#eef5ff4d'], [1, '#ffffff8c']]), pen);
+    pen.translate(x - 172, y - 205); pen.rotate(-.72);
+    pen.scale(1, .52);
+    circle(0, 0, 150, fade(pen.createRadialGradient(0, -20, 0, 0, 0, 150), [[0, '#ffffffa6'], [.45, '#ffffff30'], [1, '#ffffff00']]), pen);
+    pen.restore();
+    pen.lineCap = 'round';
+    const arc = (radius, from, to, width, color) => {
+      pen.beginPath(); pen.arc(x, y, radius, Math.PI * from, Math.PI * to);
+      pen.lineWidth = width; pen.strokeStyle = color; pen.stroke();
+    };
+    arc(r - 26, 1.06, 1.36, 11, '#ffffff80');
+    arc(r - 26, 1.40, 1.43, 11, '#ffffff80');
+    arc(r - 20, .1, .3, 6, '#ffffff4d');
+    arc(r - 38, .13, .24, 3, '#ffe9b366');
+    ellipse(pen, x - 205, y - 232, 17, 9, '#ffffffe6', -.75);
+    arc(r, 0, 2, 3.5, fade(pen.createLinearGradient(x - r, y - r, x + r, y + r), [[0, '#fff7dc'], [.35, '#b9954c99'], [.65, '#e9d49a'], [1, '#7a5c22']]));
+    // 頂蓋
+    drum(pen, 30, 46, 74, 17, metal);
+    circle(440, 17, 14, fade(pen.createRadialGradient(435, 12, 1, 440, 17, 15), [[0, '#fff8db'], [.5, '#caa452'], [1, '#5c4317']]), pen);
+    // 底座：金托、黑金鼓座、金腳
+    drum(pen, 786, 168, 126, 38, metal, '#6d5120');
+    drum(pen, 824, 112, 118, 14, metal);
+    drum(pen, 842, 238, 252, 66, lacquer);
+    drum(pen, 842, 238, 239, 7, metal, lacquer(pen, 202, 678));
+    drum(pen, 903, 253, 254, 6, metal, '#0000');
+    drum(pen, 914, 276, 286, 18, metal);
+    pen.font = '600 25px "Cormorant Garamond", Georgia, serif';
+    pen.textAlign = 'center'; pen.textBaseline = 'middle';
+    pen.fillStyle = '#e8cf8e'; pen.fillText('✦  THE  ART  OF  LIVING  ✦', 440, 884);
+  });
+}
+
+// 每顆球分三層：球身、號碼圓牌（會滾動）、亮面反光（固定）
+const NUM_FONT = '"Avenir Next", "Helvetica Neue", Arial, sans-serif'; // 投影時數字要粗
+let sprites = new Map();
+function sprite(n) {
+  if (sprites.has(n)) return sprites.get(n);
+  const R = BALL, c = R + 14, size = c * 2;
+  const body = layer(size, size, pen => {
+    pen.save(); pen.shadowColor = '#00000073'; pen.shadowBlur = 20; pen.shadowOffsetY = 12;
+    circle(c, c, R - 1, colorOf(n), pen);
+    pen.restore();
+    circle(c, c, R, colorOf(n), pen);
+    circle(c, c, R, fade(pen.createRadialGradient(c - R * .35, c - R * .42, R * .04, c - R * .08, c - R * .1, R * 1.12),
+      [[0, '#ffffffa6'], [.22, '#ffffff30'], [.55, '#00000000'], [.84, '#00000066'], [1, '#000000a6']]), pen);
+  });
+  const disc = layer(size, size, pen => {
+    circle(c, c, R * .66, fade(pen.createRadialGradient(c - R * .2, c - R * .25, 1, c, c, R * .68), [[0, '#fffef8'], [.7, '#f8efd8'], [1, '#d9c69a']]), pen);
+    pen.lineWidth = R * .05; pen.strokeStyle = '#b9954c';
+    pen.beginPath(); pen.arc(c, c, R * .61, 0, Math.PI * 2); pen.stroke();
+    pen.font = `800 ${Math.round(R * .8)}px ${NUM_FONT}`;
+    pen.textAlign = 'center'; pen.textBaseline = 'alphabetic';
+    pen.fillStyle = '#06122e';
+    const m = pen.measureText(String(n));
+    pen.fillText(n, c, c + (m.actualBoundingBoxAscent - m.actualBoundingBoxDescent) / 2);
+  });
+  const gloss = layer(size, size, pen => {
+    ellipse(pen, c - R * .34, c - R * .6, R * .34, R * .17,
+      fade(pen.createLinearGradient(0, c - R * .76, 0, c - R * .44), [[0, '#ffffffd9'], [1, '#ffffff14']]), -.5);
+    pen.lineCap = 'round'; pen.lineWidth = R * .07; pen.strokeStyle = '#ffffff59';
+    pen.beginPath(); pen.arc(c, c, R * .88, Math.PI * .14, Math.PI * .42); pen.stroke();
+  });
+  const made = { body, disc, gloss, c, size };
+  sprites.set(n, made);
+  return made;
+}
+
+const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const globeSnow = Array.from({ length: still ? 0 : 55 }, () => ({ x: Math.random() * 780 + 50, y: Math.random() * 780 + 30, r: Math.random() * 2.4 + 1, v: Math.random() * .7 + .35 }));
+
+function drawGlobeSnow() {
+  ctx.save();
+  ctx.beginPath(); ctx.arc(DOME.x, DOME.y, DOME.r - 6, 0, Math.PI * 2); ctx.clip();
+  for (const f of globeSnow) {
+    f.y += f.v * (busy ? 6 : 1); f.x += Math.sin((f.y + f.r * 40) / 60) * (busy ? 3 : .5);
+    if (f.y > 810) { f.y = 30; f.x = Math.random() * 780 + 50; }
+    circle(f.x, f.y, f.r, '#fff3d2b3');
+  }
+  ctx.restore();
+}
+
+function frame() {
+  step();
+  ctx.setTransform(SCALE, 0, 0, SCALE, 0, 0);
+  ctx.clearRect(0, 0, 880, 950);
+  ctx.drawImage(backLayer, 0, 0, 880, 950);
+  for (const b of [...balls].sort((a, z) => a.y - z.y)) {
+    const { body, disc, gloss, c, size } = sprite(b.n);
+    ctx.drawImage(body, b.x - c, b.y - c, size, size);
+    ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(b.rot || 0);
+    ctx.drawImage(disc, -c, -c, size, size);
+    ctx.restore();
+    ctx.drawImage(gloss, b.x - c, b.y - c, size, size);
+  }
+  drawGlobeSnow();
+  ctx.drawImage(frontLayer, 0, 0, 880, 950);
+  requestAnimationFrame(frame);
+}
+
+/* ---------- 背景飄雪 ---------- */
+if (!still) {
+  const sky = $('snow'), pen = sky.getContext('2d');
+  const size = () => { sky.width = innerWidth; sky.height = innerHeight; };
+  size(); addEventListener('resize', size);
+  const flakes = Array.from({ length: 90 }, () => ({ x: Math.random(), y: Math.random(), r: Math.random() * 2 + .6, v: Math.random() * .0007 + .0003 }));
+  const bokeh = Array.from({ length: 34 }, () => ({ x: Math.random(), y: Math.random() * .8, r: Math.random() * 46 + 10, p: Math.random() * 7 }));
+  (function fall(t = 0) {
+    pen.clearRect(0, 0, sky.width, sky.height);
+    if (isNight()) for (const k of bokeh) {
+      const x = k.x * sky.width + Math.sin(t / 5200 + k.p) * 18, y = k.y * sky.height + Math.cos(t / 6100 + k.p) * 12;
+      const glow = pen.createRadialGradient(x, y, 0, x, y, k.r);
+      const alpha = .10 + .07 * Math.sin(t / 1700 + k.p);
+      glow.addColorStop(0, `rgba(255,214,130,${alpha})`);
+      glow.addColorStop(.7, `rgba(255,200,110,${alpha * .55})`);
+      glow.addColorStop(1, 'rgba(255,200,110,0)');
+      pen.fillStyle = glow; pen.beginPath(); pen.arc(x, y, k.r, 0, Math.PI * 2); pen.fill();
+    }
+    pen.fillStyle = isNight() ? '#f6e2ac80' : '#c7a04e66';
+    for (const f of flakes) {
+      f.y = (f.y + f.v) % 1;
+      pen.beginPath(); pen.arc(f.x * sky.width + Math.sin(t / 1800 + f.r * 9) * 14, f.y * sky.height, f.r, 0, Math.PI * 2); pen.fill();
+    }
+    requestAnimationFrame(fall);
+  })();
+}
+
+/* ---------- Spotify ---------- */
+let spotifyApi = null, controller = null, creating = false, pendingUri = null;
+const CLIP_MS = 5000;
+let clipArmed = false, clipTimer = null;
+
+function cancelClip() { clipArmed = false; clearTimeout(clipTimer); }
+function onPlayback(e) {
+  if (!clipArmed || e.data.isPaused || e.data.isBuffering) return;
+  clipArmed = false;
+  clipTimer = setTimeout(() => controller.pause(), CLIP_MS);
+}
+function playClip() {
+  if (!controller) return;
+  cancelClip(); clipArmed = true;
+  controller.restart();
+}
+
+window.onSpotifyIframeApiReady = api => { spotifyApi = api; if (pendingUri) loadTrack(pendingUri, false); };
+
+function loadTrack(id, autoplay) {
+  pendingUri = id;
+  cancelClip();
+  if (!spotifyApi) return;
+  const uri = 'spotify:track:' + id;
+  if (controller) {
+    controller.loadUri(uri);
+    if (autoplay) setTimeout(() => { if (pendingUri === id) { clipArmed = true; controller.play(); } }, 700);
+  } else if (!creating) {
+    creating = true;
+    spotifyApi.createController($('embed'), { uri, width: '100%', height: 152 }, c => {
+      controller = c;
+      if (pendingUri !== id) c.loadUri('spotify:track:' + pendingUri);
+      c.addListener('playback_update', onPlayback);
+      if (autoplay) c.addListener('ready', () => { if (pendingUri === id) { clipArmed = true; c.play(); } });
+      render();
+    });
+  }
+}
+
+function stopMusic() { cancelClip(); if (controller) controller.pause(); }
+
+/* ---------- 畫面 ---------- */
+function render() {
+  const song = current && state.songs[current];
+  $('nowNum').textContent = current ? label(current) : '準備開始';
+  $('nowTitle').textContent = !current ? '按「抽一顆」播第一首歌'
+    : !revealed ? '？？？'
+    : song ? (song.title || '（曲名請看下方播放器）') : '這個號碼還沒設定歌曲';
+  $('cover').classList.toggle('on', Boolean(song) && !revealed);
+  $('cover').classList.toggle('guessing', guessing);
+  $('coverText').textContent = guessing ? '🎤 開放猜歌！這是哪一首？' : '🎧 請聽 5 秒前奏';
+  $('guessBtn').textContent = guessing ? '結束猜歌' : '🎤 開放猜歌';
+  $('player').style.visibility = song ? 'visible' : 'hidden';
+  $('playBtn').disabled = $('replayBtn').disabled = !(song && controller);
+  $('openLink').hidden = !(song && revealed);
+  if (song) $('openLink').href = 'https://open.spotify.com/track/' + song.id;
+
+  const left = state.max - state.drawn.length;
+  $('remain').textContent = `剩 ${left} 顆 / 共 ${state.max} 顆　・　歌單已設定 ${Object.keys(state.songs).filter(n => n <= state.max).length} 首`;
+  $('drawBtn').disabled = busy || !left;
+  $('drawBtn').textContent = busy ? '攪拌中…' : left ? '抽一顆' : '全部抽完了';
+  $('count').textContent = state.drawn.length;
+  $('undoBtn').disabled = busy || !state.drawn.length;
+  $('resetBtn').disabled = $('max').disabled = $('songsBtn').disabled = busy;
+
+  $('history').replaceChildren(...[...state.drawn].reverse().map(n => {
+    const li = document.createElement('li'), btn = document.createElement('button');
+    const num = document.createElement('b'), name = document.createElement('span');
+    const s = state.songs[n];
+    num.textContent = label(n);
+    name.textContent = n === current && !revealed ? '？？？' : s ? (s.title || 'Spotify 歌曲') : '—';
+    btn.append(num, name); btn.onclick = () => select(n); li.append(btn);
+    return li;
+  }));
+
+  const rows = plain() ? 2 : 5, perRow = state.max / rows;
+  $('board').replaceChildren(...Array.from({ length: rows }, (_, c) => {
+    const line = document.createElement('div');
+    line.className = 'line';
+    line.style.gridTemplateColumns = `${plain() ? '' : '34px '}repeat(${perRow}, 1fr)`;
+    if (!plain()) {
+      const head = document.createElement('i');
+      head.textContent = 'BINGO'[c]; head.style.setProperty('--c', COLORS[c]);
+      line.append(head);
+    }
+    for (let i = 1; i <= perRow; i++) {
+      const n = c * perRow + i, cell = document.createElement('button');
+      const hit = state.drawn.includes(n);
+      cell.className = 'cell' + (hit ? ' hit' : '');
+      cell.textContent = n; cell.disabled = !hit;
+      if (hit && state.songs[n] && !(n === current && !revealed)) cell.title = state.songs[n].title;
+      cell.onclick = () => select(n);
+      line.append(cell);
+    }
+    return line;
+  }));
+}
+
+function showBall(n) {
+  const el = $('bigball');
+  el.classList.remove('show');
+  if (!n) return;
+  el.style.setProperty('--c', colorOf(n));
+  $('bigtext').textContent = bigLabel(n);
+  void el.offsetWidth;
+  el.classList.add('show');
+}
+
+// 重聽已抽出的號碼（對獎用）
+function select(n) {
+  if (busy) return;
+  current = n; revealed = true; guessing = false;
+  showBall(n);
+  if (state.songs[n]) loadTrack(state.songs[n].id, true); else stopMusic();
+  render();
+}
+
+function speak(n) {
+  if (!state.voice || !window.speechSynthesis) return 0;
+  speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(plain() ? `${n} 號` : `${'BINGO'[column(n)]}，${n} 號`);
+  u.lang = 'zh-TW';
+  speechSynthesis.speak(u);
+  return 1800;
+}
+
+function draw() {
+  const pool = remaining();
+  if (busy || !pool.length || document.querySelector('dialog[open]')) return;
+  busy = true; current = null; guessing = false;
+  stopMusic(); showBall(null); render();
+  const n = pool[crypto.getRandomValues(new Uint32Array(1))[0] % pool.length];
+  setTimeout(() => {
+    busy = false;
+    current = n; revealed = !state.guess;
+    state.drawn.push(n); save();
+    balls = balls.filter(b => b.n !== n);
+    showBall(n);
+    const wait = speak(n);
+    const song = state.songs[n];
+    if (song) setTimeout(() => { if (current === n && !busy) loadTrack(song.id, true); }, wait);
+    render();
+    scheduleAuto();
+  }, 1800);
+}
+
+function scheduleAuto() {
+  clearTimeout(autoTimer);
+  const sec = Number($('auto').value);
+  if (sec && remaining().length) autoTimer = setTimeout(draw, sec * 1000);
+}
+
+function restart() {
+  state.drawn = []; save();
+  current = null; $('auto').value = '0'; clearTimeout(autoTimer);
+  stopMusic(); showBall(null); resetBalls(); render();
+}
+
+/* ---------- 歌單 ---------- */
+const TRACK = /(?:https?:\/\/open\.spotify\.com\/(?:intl-[\w-]+\/)?track\/|spotify:track:)([A-Za-z0-9]{22})(?:\?\S*)?/;
+
+function parseSongs(text) {
+  const songs = {}, errors = [];
+  let next = 1;
+  text.split('\n').forEach((raw, i) => {
+    let line = raw.trim();
+    if (!line) return;
+    let num = next;
+    const prefix = line.match(/^(\d{1,2})\s*(?:[.、)）:：]|\t|,)\s*/);
+    if (prefix) { num = Number(prefix[1]); line = line.slice(prefix[0].length); }
+    next = num + 1;
+    const m = line.match(TRACK);
+    if (!m) return errors.push(`第 ${i + 1} 行找不到 Spotify 歌曲連結`);
+    if (num < 1 || num > 75) return errors.push(`第 ${i + 1} 行的號碼 ${num} 超出 1～75`);
+    if (songs[num]) return errors.push(`第 ${i + 1} 行：${num} 號重複了`);
+    const title = line.replace(m[0], '').replace(/^[\s,|｜\-–]+|[\s,|｜\-–]+$/g, '');
+    songs[num] = { id: m[1], title };
+  });
+  return { songs, errors };
+}
+
+async function fetchTitles() {
+  const missing = Object.values(state.songs).filter(s => !s.title);
+  for (let i = 0; i < missing.length; i += 5) {
+    await Promise.all(missing.slice(i, i + 5).map(async s => {
+      try {
+        const r = await fetch('/title?id=' + s.id);
+        if (r.ok) s.title = (await r.json()).title || '';
+      } catch { /* 抓不到就看播放器上的曲名，下次開啟會再試 */ }
+    }));
+    save(); render();
+  }
+}
+
+$('songsBtn').onclick = () => {
+  clearTimeout(autoTimer); $('auto').value = '0';
+  $('songsText').value = state.text || Object.entries(state.songs).map(([n, s]) => `${n}. ${s.title} https://open.spotify.com/track/${s.id}`).join('\n');
+  $('status').textContent = '';
+  $('songsDialog').showModal();
+};
+$('cancelBtn').onclick = () => $('songsDialog').close();
+let warned = '';
+$('saveBtn').onclick = () => {
+  const text = $('songsText').value;
+  const { songs, errors } = parseSongs(text);
+  if (errors.length && warned !== text) {
+    warned = text;
+    $('status').textContent = errors.join('\n') + '\n再按一次「儲存歌單」會略過這幾行。';
+    return;
+  }
+  const known = Object.fromEntries(Object.values(state.songs).map(s => [s.id, s.title]));
+  for (const s of Object.values(songs)) s.title ||= known[s.id] || '';
+  state.songs = songs; state.text = text; save();
+  $('songsDialog').close();
+  if (current && songs[current]) loadTrack(songs[current].id, false); else stopMusic();
+  render(); fetchTitles();
+};
+
+/* ---------- 靜態網站（GitHub Pages）用的歌單檔 ---------- */
+// 匯出已儲存的歌單（含曲名），放在 index.html 旁邊就能在沒有伺服器的網站上使用
+$('exportBtn').onclick = () => {
+  if (!Object.keys(state.songs).length) { $('status').textContent = '請先按「儲存歌單」，再打開這裡匯出。'; return; }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(state.songs, null, 2)], { type: 'application/json' }));
+  a.download = 'songs.json'; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+};
+
+// 這台瀏覽器還沒設定歌單時，讀取同資料夾的 songs.json
+async function loadSharedSongs() {
+  if (state.text || Object.keys(state.songs).length) return;
+  try {
+    const r = await fetch('songs.json', { cache: 'no-store' });
+    if (!r.ok) return;
+    const songs = {};
+    for (const [n, song] of Object.entries(await r.json())) {
+      if (Number(n) >= 1 && Number(n) <= 75 && /^[A-Za-z0-9]{22}$/.test(song.id)) songs[n] = { id: song.id, title: String(song.title || '') };
+    }
+    state.songs = songs;
+    // 不寫入瀏覽器儲存，之後更新 songs.json 才會生效
+    state.text = '';
+    render(); fetchTitles();
+  } catch { /* 沒有 songs.json 就維持空白歌單 */ }
+}
+
+/* ---------- 控制 ---------- */
+$('drawBtn').onclick = draw;
+$('playBtn').onclick = () => { cancelClip(); controller?.togglePlay(); };
+$('replayBtn').onclick = $('coverClip').onclick = playClip;
+$('guessBtn').onclick = () => { guessing = !guessing; render(); };
+$('revealBtn').onclick = () => { revealed = true; guessing = false; render(); };
+$('wallNums').replaceChildren(...Array.from({ length: 20 }, (_, i) => Object.assign(document.createElement('li'), { textContent: i + 1 })));
+$('wallBtn').onclick = () => {
+  clearTimeout(autoTimer); $('auto').value = '0';
+  $('wall').showModal();
+};
+$('wallClose').onclick = () => $('wall').close();
+$('guess').checked = state.guess;
+$('guess').onchange = e => { state.guess = e.target.checked; if (!state.guess) revealed = true; save(); render(); };
+$('voice').checked = state.voice;
+$('voice').onchange = e => { state.voice = e.target.checked; save(); };
+$('auto').onchange = () => { clearTimeout(autoTimer); if (Number($('auto').value)) draw(); };
+$('max').value = String(state.max);
+$('max').onchange = e => {
+  if (state.drawn.length && !confirm('改號碼範圍會清除目前抽出的紀錄，確定嗎？')) { e.target.value = String(state.max); return; }
+  state.max = Number(e.target.value); restart();
+};
+$('undoBtn').onclick = () => {
+  clearTimeout(autoTimer); $('auto').value = '0';
+  state.drawn.pop(); save();
+  current = state.drawn.at(-1) || null; revealed = true;
+  stopMusic(); showBall(current);
+  if (current && state.songs[current]) loadTrack(state.songs[current].id, false);
+  resetBalls(); render();
+};
+$('resetBtn').onclick = () => { if (!state.drawn.length || confirm('確定要清除已抽出的號碼，重新開始嗎？（歌單會保留）')) restart(); };
+$('cardsBtn').onclick = () => window.open('cards.html', '_blank', 'noopener');
+$('fullBtn').onclick = () => document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen();
+document.addEventListener('keydown', e => {
+  if (e.code !== 'Space' && e.code !== 'Enter') return;
+  if (document.querySelector('dialog[open]') || e.target.closest('button, input, select, textarea, a')) return;
+  e.preventDefault();
+  if (!e.repeat) draw();
+});
+$('drawBtn').addEventListener('click', () => $('drawBtn').blur());
+
+resetBalls();
+showBall(current);
+if (current && state.songs[current]) pendingUri = state.songs[current].id;
+render();
+fetchTitles();
+loadSharedSongs();
+
+/* ---------- 晚宴版／明亮版 ---------- */
+function applyTheme() {
+  const night = state.theme !== 'light';
+  document.body.classList.toggle('night', night);
+  $('themeBtn').textContent = night ? '☀ 明亮版' : '🌙 晚宴版';
+  buildMachine();
+}
+$('themeBtn').onclick = () => { state.theme = isNight() ? 'light' : 'night'; save(); applyTheme(); };
+applyTheme();
+// 字型載入完成後重畫，球號與底座字樣才會套用新字型
+Promise.all([document.fonts.load('700 40px "Cormorant Garamond"'), document.fonts.load('600 25px "Cormorant Garamond"')])
+  .catch(() => {})
+  .then(() => { sprites = new Map(); buildMachine(); });
+requestAnimationFrame(frame);
+</script>
+<script src="https://open.spotify.com/embed/iframe-api/v1" async></script>
+</body>
+</html>
