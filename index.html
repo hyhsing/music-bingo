@@ -254,6 +254,7 @@
   <textarea id="songsText" spellcheck="false" placeholder="https://open.spotify.com/track/…&#10;歌名 - 歌手 https://open.spotify.com/track/…&#10;12. https://open.spotify.com/track/…"></textarea>
   <div id="status"></div>
   <div class="row">
+    <button id="presetBtn" title="讀取網站旁邊的 songs.json">📂 載入預設歌單</button>
     <button id="exportBtn" title="放到 GitHub Pages 用">⬇ 匯出 songs.json</button>
     <span class="grow"></span>
     <button id="cancelBtn">取消</button>
@@ -720,7 +721,7 @@ async function fetchTitles() {
 
 $('songsBtn').onclick = () => {
   clearTimeout(autoTimer); $('auto').value = '0';
-  $('songsText').value = state.text || Object.entries(state.songs).map(([n, s]) => `${n}. ${s.title} https://open.spotify.com/track/${s.id}`).join('\n');
+  $('songsText').value = state.text || songLines(state.songs);
   $('status').textContent = '';
   $('songsDialog').showModal();
 };
@@ -752,21 +753,39 @@ $('exportBtn').onclick = () => {
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 };
 
-// 這台瀏覽器還沒設定歌單時，讀取同資料夾的 songs.json
-async function loadSharedSongs() {
-  if (state.text || Object.keys(state.songs).length) return;
+// 讀取同資料夾的 songs.json（預設歌單）；沒有檔案或格式不對就回傳 null
+async function fetchPreset() {
   try {
     const r = await fetch('songs.json', { cache: 'no-store' });
-    if (!r.ok) return;
+    if (!r.ok) return null;
     const songs = {};
     for (const [n, song] of Object.entries(await r.json())) {
-      if (Number(n) >= 1 && Number(n) <= 75 && /^[A-Za-z0-9]{22}$/.test(song.id)) songs[n] = { id: song.id, title: String(song.title || '') };
+      if (Number(n) >= 1 && Number(n) <= 75 && /^[A-Za-z0-9]{22}$/.test(song?.id)) songs[n] = { id: song.id, title: String(song.title || '').replace(/\s+/g, ' ').trim() };
     }
-    state.songs = songs;
-    // 不寫入瀏覽器儲存，之後更新 songs.json 才會生效
-    state.text = '';
-    render(); fetchTitles();
-  } catch { /* 沒有 songs.json 就維持空白歌單 */ }
+    return Object.keys(songs).length ? songs : null;
+  } catch { return null; }
+}
+
+const songLines = songs => Object.entries(songs).map(([n, s]) => `${n}. ${s.title ? s.title + ' ' : ''}https://open.spotify.com/track/${s.id}`).join('\n');
+
+// 按鈕：把預設歌單填進輸入框，按「儲存歌單」才會套用，按「取消」保留原本的
+$('presetBtn').onclick = async () => {
+  $('status').textContent = '讀取中…';
+  const songs = await fetchPreset();
+  if (!songs) { $('status').textContent = '找不到可用的預設歌單。請把 songs.json 放在 index.html 旁邊（線上版要上傳到網站）。'; return; }
+  $('songsText').value = songLines(songs);
+  $('status').textContent = `已載入預設歌單 ${Object.keys(songs).length} 首。按「儲存歌單」套用，按「取消」保留原本的歌單。`;
+};
+
+// 這台瀏覽器還沒設定歌單時，自動使用預設歌單
+async function loadSharedSongs() {
+  if (state.text || Object.keys(state.songs).length) return;
+  const songs = await fetchPreset();
+  if (!songs || state.text) return;
+  state.songs = songs;
+  // 不寫入瀏覽器儲存，之後更新 songs.json 才會生效
+  state.text = '';
+  render(); fetchTitles();
 }
 
 /* ---------- 控制 ---------- */
